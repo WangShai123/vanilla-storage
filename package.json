@@ -1,0 +1,56 @@
+{
+  "name": "vanilla-storage",
+  "version": "0.2.0",
+  "private": false,
+  "description": "A small async storage abstraction for browser storage drivers.",
+  "keywords": [
+    "cookie",
+    "indexedDB",
+    "javascript",
+    "localStorage",
+    "ttl",
+    "vanilla"
+  ],
+  "homepage": "https://github.com/WangShai123/vanilla-storage",
+  "bugs": {
+    "url": "https://github.com/WangShai123/vanilla-storage/issues"
+  },
+  "license": "ISC",
+  "author": "Wang Shai <hiwangshai@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WangShai123/vanilla-storage.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "browser": "./dist/index.umd.js",
+  "unpkg": "./dist/index.umd.js",
+  "exports": {
+    ".": {
+      "browser": "./dist/index.umd.js",
+      "import": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp dev",
+    "test": "vp test",
+    "check": "vp check",
+    "lint": "vp lint",
+    "prepublishOnly": "vp run build"
+  },
+  "devDependencies": {
+    "vite-plus": "^0.1.23"
+  },
+  "fullname": "vanilla-storage"
+}
