@@ -12,13 +12,17 @@ npm install vanilla-create-storage
 
 script:
 
-```javascript
-// umd: GlobalName: storage
+```html
+<!-- umd: GlobalName: storage -->
 <script src="https://unpkg.com/vanilla-create-storage/dist/index.umd.js"></script>
-const { createStorage } = storage;
+<script>
+  const { createStorage } = storage;
+</script>
 
-// es module
-import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.mjs';
+<!-- es module -->
+<script type="module">
+  import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.mjs';
+</script>
 ```
 
 ## Usage

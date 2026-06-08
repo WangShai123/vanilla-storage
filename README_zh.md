@@ -12,13 +12,17 @@ npm install vanilla-create-storage
 
 script:
 
-```javascript
-// umd: 全局变量 storage
+```html
+<!-- umd: 全局变量 storage -->
 <script src="https://unpkg.com/vanilla-create-storage/dist/index.umd.js"></script>
-const { createStorage } = storage;
+<script>
+  const { createStorage } = storage;
+</script>
 
-// esm: 模块导入
-import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.mjs';
+<!-- esm: 模块导入 -->
+<script type="module">
+  import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.mjs';
+</script>
 ```
 
 ## 使用
