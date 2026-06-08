@@ -7,24 +7,24 @@
 npm:
 
 ```bash
-npm install vanilla-storage
+npm install vanilla-create-storage
 ```
 
 script:
 
 ```javascript
 // umd: 全局变量 storage
-<script src="https://unpkg.com/vanilla-storage/dist/index.umd.js"></script>
+<script src="https://unpkg.com/vanilla-create-storage/dist/index.umd.js"></script>
 const { createStorage } = storage;
 
 // esm: 模块导入
-import { createStorage } from 'https://unpkg.com/vanilla-storage/dist/index.mjs';
+import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.mjs';
 ```
 
 ## 使用
 
 ```js
-import { createStorage } from 'vanilla-storage';
+import { createStorage } from 'vanilla-create-storage';
 
 const storage = createStorage({
   driver: 'indexedDB',

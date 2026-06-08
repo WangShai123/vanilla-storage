@@ -1,5 +1,5 @@
 {
-  "name": "vanilla-storage",
+  "name": "vanilla-create-storage",
   "version": "0.2.0",
   "private": false,
   "description": "A small async storage abstraction for browser storage drivers.",
@@ -51,5 +51,5 @@
   "devDependencies": {
     "vite-plus": "^0.1.23"
   },
-  "fullname": "vanilla-storage"
+  "fullname": "vanilla-create-storage"
 }

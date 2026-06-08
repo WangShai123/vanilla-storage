@@ -7,24 +7,24 @@ A small async storage abstraction for browser storage drivers.
 npm:
 
 ```bash
-npm install vanilla-storage
+npm install vanilla-create-storage
 ```
 
 script:
 
 ```javascript
 // umd: GlobalName: storage
-<script src="https://unpkg.com/vanilla-storage/dist/index.umd.js"></script>
+<script src="https://unpkg.com/vanilla-create-storage/dist/index.umd.js"></script>
 const { createStorage } = storage;
 
 // es module
-import { createStorage } from 'https://unpkg.com/vanilla-storage/dist/index.mjs';
+import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.mjs';
 ```
 
 ## Usage
 
 ```js
-import { createStorage } from 'vanilla-storage';
+import { createStorage } from 'vanilla-create-storage';
 
 const storage = createStorage({
   driver: 'indexedDB',
