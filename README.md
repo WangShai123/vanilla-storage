@@ -21,7 +21,7 @@ script:
 
 <!-- es module -->
 <script type="module">
-  import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.mjs';
+  import { createStorage } from 'https://unpkg.com/vanilla-create-storage/dist/index.js';
 </script>
 ```
 

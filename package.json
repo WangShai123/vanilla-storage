@@ -1,6 +1,6 @@
 {
   "name": "vanilla-create-storage",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "private": false,
   "description": "A small async storage abstraction for browser storage drivers.",
   "keywords": [
@@ -26,14 +26,14 @@
   ],
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/index.mjs",
-  "module": "./dist/index.mjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "browser": "./dist/index.umd.js",
   "unpkg": "./dist/index.umd.js",
   "exports": {
     ".": {
       "browser": "./dist/index.umd.js",
-      "import": "./dist/index.mjs"
+      "import": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
