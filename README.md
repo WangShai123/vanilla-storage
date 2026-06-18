@@ -13,10 +13,10 @@ npm install vanilla-create-storage
 script:
 
 ```html
-<!-- umd: GlobalName: storage -->
+<!-- umd: GlobalName: vanillaStorage -->
 <script src="https://unpkg.com/vanilla-create-storage/dist/index.umd.js"></script>
 <script>
-  const { createStorage } = storage;
+  const { createStorage } = vanillaStorage;
 </script>
 
 <!-- es module -->

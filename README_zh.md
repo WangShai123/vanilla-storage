@@ -13,10 +13,10 @@ npm install vanilla-create-storage
 script:
 
 ```html
-<!-- umd: 全局变量 storage -->
+<!-- umd: 全局变量 vanillaStorage -->
 <script src="https://unpkg.com/vanilla-create-storage/dist/index.umd.js"></script>
 <script>
-  const { createStorage } = storage;
+  const { createStorage } = vanillaStorage;
 </script>
 
 <!-- esm: 模块导入 -->

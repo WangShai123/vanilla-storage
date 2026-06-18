@@ -5,7 +5,7 @@ export default defineConfig({
     entry: 'src/index.js',
     outDir: 'dist',
     format: ['esm', 'umd'],
-    globalName: 'storage',
+    globalName: 'vanillaStorage',
     target: 'es2020',
     platform: 'browser',
     minify: true,
