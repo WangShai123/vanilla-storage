@@ -3,6 +3,19 @@ import {
   StorageUnavailableError,
   toStorageError,
 } from '../errors.js';
+import type { RawStorageAdapter } from '../utils.js';
+
+export interface CookieAdapterOptions {
+  document?: Document;
+  domain?: string;
+  expires?: Date | number | string;
+  maxAge?: number;
+  path?: string;
+  sameSite?: 'strict' | 'lax' | 'none' | 'Strict' | 'Lax' | 'None';
+  secure?: boolean;
+}
+
+type CookieDefaults = Omit<CookieAdapterOptions, 'document'>;
 
 const RESERVED_COOKIE_KEYS = new Set([
   'expires',
@@ -14,9 +27,12 @@ const RESERVED_COOKIE_KEYS = new Set([
   'samesite',
 ]);
 
-export class CookieAdapter {
-  constructor(options = {}) {
-    this.name = 'cookie';
+export class CookieAdapter implements RawStorageAdapter {
+  name = 'cookie';
+  document?: Document;
+  defaults: CookieDefaults;
+
+  constructor(options: CookieAdapterOptions = {}) {
     this.document = options.document;
     this.defaults = {
       path: '/',
@@ -25,10 +41,9 @@ export class CookieAdapter {
       domain: undefined,
       ...options,
     };
-    delete this.defaults.document;
   }
 
-  _getDocument() {
+  _getDocument(): Document {
     const doc =
       this.document ||
       (typeof globalThis !== 'undefined' ? globalThis.document : undefined);
@@ -42,7 +57,7 @@ export class CookieAdapter {
     return doc;
   }
 
-  async isAvailable() {
+  async isAvailable(): Promise<boolean> {
     const key = `__vanilla_storage_test__${Date.now()}_${Math.random()}`;
 
     try {
@@ -55,7 +70,7 @@ export class CookieAdapter {
     }
   }
 
-  async getRaw(key) {
+  async getRaw(key: string): Promise<string | undefined> {
     try {
       const encodedKey = encodeURIComponent(key);
       const cookies = this._getDocument().cookie.split(';');
@@ -81,7 +96,7 @@ export class CookieAdapter {
     }
   }
 
-  async setRaw(key, value) {
+  async setRaw(key: string, value: string): Promise<void> {
     try {
       this._setCookie(key, value, this.defaults);
     } catch (cause) {
@@ -89,7 +104,7 @@ export class CookieAdapter {
     }
   }
 
-  async deleteRaw(key) {
+  async deleteRaw(key: string): Promise<void> {
     try {
       this._setCookie(key, '', {
         ...this.defaults,
@@ -101,7 +116,7 @@ export class CookieAdapter {
     }
   }
 
-  async clearRaw(prefix = '') {
+  async clearRaw(prefix = ''): Promise<void> {
     const keys = await this.keysRaw(prefix);
 
     for (const key of keys) {
@@ -109,9 +124,9 @@ export class CookieAdapter {
     }
   }
 
-  async keysRaw(prefix = '') {
+  async keysRaw(prefix = ''): Promise<string[]> {
     try {
-      const keys = [];
+      const keys: string[] = [];
       const cookies = this._getDocument().cookie.split(';');
 
       for (const cookie of cookies) {
@@ -135,7 +150,7 @@ export class CookieAdapter {
     }
   }
 
-  _setCookie(key, value, options) {
+  _setCookie(key: string, value: string, options: CookieDefaults): void {
     this._validateCookieKey(key);
 
     let cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
@@ -172,7 +187,7 @@ export class CookieAdapter {
     this._getDocument().cookie = cookie;
   }
 
-  _validateCookieKey(key) {
+  _validateCookieKey(key: string): void {
     if (RESERVED_COOKIE_KEYS.has(key.toLowerCase())) {
       throw new StorageDataError(`Cookie key "${key}" is reserved.`, {
         driver: this.name,
@@ -189,7 +204,7 @@ export class CookieAdapter {
   }
 }
 
-function normalizeSameSite(value) {
+function normalizeSameSite(value: CookieAdapterOptions['sameSite']): string {
   const normalized = String(value).toLowerCase();
 
   if (normalized === 'strict') {

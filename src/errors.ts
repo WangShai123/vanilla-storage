@@ -1,5 +1,19 @@
+export interface VanillaStorageErrorOptions {
+  code?: string;
+  driver?: string;
+  key?: string;
+  details?: unknown;
+  cause?: unknown;
+}
+
 export class VanillaStorageError extends Error {
-  constructor(message, options = {}) {
+  code: string;
+  driver?: string;
+  key?: string;
+  details?: unknown;
+  declare cause?: unknown;
+
+  constructor(message: string, options: VanillaStorageErrorOptions = {}) {
     super(message);
     this.name = this.constructor.name;
     this.code = options.code || 'STORAGE_ERROR';
@@ -23,39 +37,44 @@ export class VanillaStorageError extends Error {
 }
 
 export class StorageUnavailableError extends VanillaStorageError {
-  constructor(message, options = {}) {
+  constructor(message: string, options: VanillaStorageErrorOptions = {}) {
     super(message, { ...options, code: 'DRIVER_UNAVAILABLE' });
   }
 }
 
 export class StorageQuotaError extends VanillaStorageError {
-  constructor(message, options = {}) {
+  constructor(message: string, options: VanillaStorageErrorOptions = {}) {
     super(message, { ...options, code: 'QUOTA_EXCEEDED' });
   }
 }
 
 export class StorageSerializationError extends VanillaStorageError {
-  constructor(message, options = {}) {
+  constructor(message: string, options: VanillaStorageErrorOptions = {}) {
     super(message, { ...options, code: 'SERIALIZATION_FAILED' });
   }
 }
 
 export class StorageDataError extends VanillaStorageError {
-  constructor(message, options = {}) {
+  constructor(message: string, options: VanillaStorageErrorOptions = {}) {
     super(message, { ...options, code: 'INVALID_RECORD' });
   }
 }
 
-export function isQuotaExceededError(error) {
+export function isQuotaExceededError(error: unknown): boolean {
+  const candidate = error as { code?: number; name?: string } | null;
+
   return (
-    error?.name === 'QuotaExceededError' ||
-    error?.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-    error?.code === 22 ||
-    error?.code === 1014
+    candidate?.name === 'QuotaExceededError' ||
+    candidate?.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    candidate?.code === 22 ||
+    candidate?.code === 1014
   );
 }
 
-export function toStorageError(error, options = {}) {
+export function toStorageError(
+  error: unknown,
+  options: VanillaStorageErrorOptions = {}
+): VanillaStorageError {
   if (error instanceof VanillaStorageError) {
     return error;
   }
@@ -68,7 +87,7 @@ export function toStorageError(error, options = {}) {
   }
 
   return new VanillaStorageError(
-    error?.message || 'Storage operation failed.',
+    error instanceof Error ? error.message : 'Storage operation failed.',
     {
       ...options,
       cause: error,

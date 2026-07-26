@@ -2,7 +2,7 @@ import { defineConfig } from 'vite-plus';
 
 export default defineConfig({
   pack: {
-    entry: 'src/index.js',
+    entry: 'src/index.ts',
     outDir: 'dist',
     format: ['esm', 'umd'],
     globalName: 'vanillaStorage',
@@ -12,12 +12,12 @@ export default defineConfig({
     clean: true,
     outExtensions({ format }) {
       return {
-        // js: format === 'es' ? '.mjs' : '.js',
         js: format === 'es' ? '.js' : '.js',
       };
     },
-    // sourcemap: true,
+    dts: true,
     exports: false,
+    // sourcemap: true,
   },
 
   lint: {

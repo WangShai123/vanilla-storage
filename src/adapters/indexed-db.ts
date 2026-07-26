@@ -3,19 +3,37 @@ import {
   StorageUnavailableError,
   toStorageError,
 } from '../errors.js';
+import type { RawStorageAdapter } from '../utils.js';
 
-export class IndexedDBAdapter {
-  constructor(options = {}) {
-    this.name = 'indexedDB';
+export interface IndexedDBAdapterOptions {
+  dbName?: string;
+  indexedDB?: IDBFactory;
+  storeName?: string;
+  version?: number;
+}
+
+interface IndexedDBRecord {
+  key: string;
+  value: string;
+}
+
+export class IndexedDBAdapter implements RawStorageAdapter {
+  name = 'indexedDB';
+  dbName: string;
+  storeName: string;
+  version: number;
+  indexedDB?: IDBFactory;
+  db: IDBDatabase | null = null;
+  openPromise: Promise<IDBDatabase> | null = null;
+
+  constructor(options: IndexedDBAdapterOptions = {}) {
     this.dbName = options.dbName || 'VanillaStorage';
     this.storeName = options.storeName || 'records';
     this.version = options.version || 1;
     this.indexedDB = options.indexedDB || getIndexedDB();
-    this.db = null;
-    this.openPromise = null;
   }
 
-  async isAvailable() {
+  async isAvailable(): Promise<boolean> {
     if (!this.indexedDB) {
       return false;
     }
@@ -28,7 +46,7 @@ export class IndexedDBAdapter {
     }
   }
 
-  async getRaw(key) {
+  async getRaw(key: string): Promise<string | undefined> {
     try {
       return await this._getRecordValue(key);
     } catch (cause) {
@@ -36,7 +54,7 @@ export class IndexedDBAdapter {
     }
   }
 
-  async setRaw(key, value) {
+  async setRaw(key: string, value: string): Promise<void> {
     try {
       await this._writeRecord((store) => store.put({ key, value }));
     } catch (cause) {
@@ -44,7 +62,7 @@ export class IndexedDBAdapter {
     }
   }
 
-  async deleteRaw(key) {
+  async deleteRaw(key: string): Promise<void> {
     try {
       await this._writeRecord((store) => store.delete(key));
     } catch (cause) {
@@ -52,7 +70,7 @@ export class IndexedDBAdapter {
     }
   }
 
-  async clearRaw(prefix = '') {
+  async clearRaw(prefix = ''): Promise<void> {
     if (!prefix) {
       await this._writeRecord((store) => store.clear());
       return;
@@ -66,7 +84,7 @@ export class IndexedDBAdapter {
     });
   }
 
-  async keysRaw(prefix = '') {
+  async keysRaw(prefix = ''): Promise<string[]> {
     const keys = await this._readAllKeys();
 
     if (!prefix) {
@@ -76,7 +94,7 @@ export class IndexedDBAdapter {
     return keys.filter((key) => key.startsWith(prefix));
   }
 
-  async close() {
+  async close(): Promise<void> {
     if (this.db) {
       this.db.close();
       this.db = null;
@@ -84,7 +102,7 @@ export class IndexedDBAdapter {
     }
   }
 
-  async _open() {
+  async _open(): Promise<IDBDatabase> {
     if (this.db) {
       return this.db;
     }
@@ -97,6 +115,15 @@ export class IndexedDBAdapter {
 
     if (!this.openPromise) {
       this.openPromise = new Promise((resolve, reject) => {
+        if (!this.indexedDB) {
+          reject(
+            new StorageUnavailableError('indexedDB is not available.', {
+              driver: this.name,
+            })
+          );
+          return;
+        }
+
         const request = this.indexedDB.open(this.dbName, this.version);
 
         request.onupgradeneeded = () => {
@@ -133,14 +160,14 @@ export class IndexedDBAdapter {
     return this.openPromise;
   }
 
-  async _getRecordValue(key) {
+  async _getRecordValue(key: string): Promise<string | undefined> {
     const db = await this._open();
 
-    return await new Promise((resolve, reject) => {
+    return await new Promise<string | undefined>((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readonly');
       const store = transaction.objectStore(this.storeName);
       const request = store.get(key);
-      let result;
+      let result: string | undefined;
 
       transaction.oncomplete = () => {
         resolve(result);
@@ -149,19 +176,19 @@ export class IndexedDBAdapter {
       transaction.onabort = () => reject(transaction.error);
 
       request.onsuccess = () => {
-        result =
-          request.result && request.result.value !== undefined
-            ? request.result.value
-            : undefined;
+        const record = request.result as IndexedDBRecord | undefined;
+        result = record?.value;
       };
       request.onerror = () => reject(request.error);
     });
   }
 
-  async _writeRecord(callback) {
+  async _writeRecord(
+    callback: (store: IDBObjectStore) => IDBRequest | undefined | void
+  ): Promise<void> {
     const db = await this._open();
 
-    return await new Promise((resolve, reject) => {
+    return await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readwrite');
       const store = transaction.objectStore(this.storeName);
 
@@ -182,10 +209,10 @@ export class IndexedDBAdapter {
     });
   }
 
-  async _readAllKeys() {
+  async _readAllKeys(): Promise<string[]> {
     if (
       typeof IDBObjectStore !== 'undefined' &&
-      IDBObjectStore.prototype.getAllKeys
+      typeof IDBObjectStore.prototype.getAllKeys === 'function'
     ) {
       return await this._requestKeysWithGetAllKeys();
     }
@@ -193,14 +220,14 @@ export class IndexedDBAdapter {
     return await this._requestKeysWithCursor();
   }
 
-  async _requestKeysWithGetAllKeys() {
+  async _requestKeysWithGetAllKeys(): Promise<string[]> {
     const db = await this._open();
 
-    return await new Promise((resolve, reject) => {
+    return await new Promise<string[]>((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readonly');
       const store = transaction.objectStore(this.storeName);
       const request = store.getAllKeys();
-      let result = [];
+      let result: string[] = [];
 
       transaction.oncomplete = () => resolve(result);
       transaction.onerror = () => reject(transaction.error);
@@ -213,13 +240,13 @@ export class IndexedDBAdapter {
     });
   }
 
-  async _requestKeysWithCursor() {
+  async _requestKeysWithCursor(): Promise<string[]> {
     const db = await this._open();
 
-    return await new Promise((resolve, reject) => {
+    return await new Promise<string[]>((resolve, reject) => {
       const transaction = db.transaction(this.storeName, 'readonly');
       const store = transaction.objectStore(this.storeName);
-      const keys = [];
+      const keys: string[] = [];
       const request = store.openCursor();
 
       transaction.oncomplete = () => resolve(keys);
@@ -245,7 +272,7 @@ export class IndexedDBAdapter {
   }
 }
 
-function getIndexedDB() {
+function getIndexedDB(): IDBFactory | undefined {
   if (typeof globalThis === 'undefined') {
     return undefined;
   }

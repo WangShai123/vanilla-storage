@@ -13,6 +13,7 @@ import {
 } from '../errors.js';
 import {
   MISSING,
+  type RawStorageAdapter,
   assertKey,
   hasOwn,
   isObject,
@@ -25,7 +26,73 @@ import {
 
 const RECORD_VERSION = 1;
 
-const BUILTIN_ADAPTERS = {
+export interface StorageCodec<T = unknown> {
+  name: string;
+  serialize(value: T): string;
+  deserialize(payload: string): T;
+}
+
+export type BuiltinStorageDriver =
+  | 'cookie'
+  | 'indexedDB'
+  | 'localStorage'
+  | 'memory'
+  | 'sessionStorage';
+
+export type StorageDriver = string | RawStorageAdapter | StorageAdapterFactory;
+
+export interface StorageAdapterFactoryContext {
+  driverOptions: DriverOptions;
+  storage: Storage;
+}
+
+export type StorageAdapterFactory = (
+  context: StorageAdapterFactoryContext
+) => RawStorageAdapter;
+
+export interface SetOptions<T = unknown> {
+  codec?: string | StorageCodec<T>;
+  expiresAt?: Date | number | null | false;
+  ttl?: number | null | false;
+}
+
+export interface GetOptions<T = unknown> {
+  defaultValue?: T;
+}
+
+export interface PruneOptions {
+  removeInvalid?: boolean;
+}
+
+export type DriverOptions = Record<string, unknown>;
+
+export interface StorageOptions {
+  adapters?: Record<string, StorageDriver>;
+  clock?: () => number;
+  codec?: string | StorageCodec;
+  codecs?: Record<string, StorageCodec> | StorageCodec[];
+  driver?: StorageDriver;
+  driverOptions?: DriverOptions;
+  fallback?: StorageDriver | StorageDriver[] | null | false;
+  keySeparator?: string;
+  namespace?: string | null | false;
+  onDriverError?: (error: unknown, driver: string) => void;
+  ttl?: number | null | false;
+}
+
+interface StorageRecord {
+  codec: string;
+  expiresAt: number | null;
+  v: typeof RECORD_VERSION;
+  value: string;
+}
+
+type InspectAction = 'delete' | 'keep';
+
+const BUILTIN_ADAPTERS: Record<
+  BuiltinStorageDriver,
+  (options: DriverOptions) => RawStorageAdapter
+> = {
   cookie: (options) => new CookieAdapter(options),
   indexedDB: (options) => new IndexedDBAdapter(options),
   localStorage: (options) => new LocalStorageAdapter(options),
@@ -33,14 +100,28 @@ const BUILTIN_ADAPTERS = {
   sessionStorage: (options) => new SessionStorageAdapter(options),
 };
 
-const BUILTIN_CODECS = {
+const BUILTIN_CODECS: Record<string, StorageCodec> = {
   json: jsonCodec,
   'raw-string': rawStringCodec,
 };
 
 export class Storage {
-  constructor(options = {}) {
-    const normalizedOptions =
+  driver: StorageDriver;
+  fallback: StorageDriver[];
+  namespace: string;
+  keySeparator: string;
+  defaultTtl: number | null;
+  clock: () => number;
+  driverOptions: DriverOptions;
+  adapters: Record<string, StorageDriver>;
+  codec: StorageCodec;
+  codecs: Map<string, StorageCodec>;
+  onDriverError?: (error: unknown, driver: string) => void;
+  _adapter: RawStorageAdapter | null;
+  _adapterPromise: Promise<RawStorageAdapter> | null;
+
+  constructor(options: StorageOptions | string = {}) {
+    const normalizedOptions: StorageOptions =
       typeof options === 'string' ? { driver: options } : { ...options };
 
     this.driver = normalizedOptions.driver || 'localStorage';
@@ -58,7 +139,7 @@ export class Storage {
     this._adapterPromise = null;
   }
 
-  get prefix() {
+  get prefix(): string {
     if (!this.namespace) {
       return '';
     }
@@ -66,15 +147,19 @@ export class Storage {
     return `${this.namespace}${this.keySeparator}`;
   }
 
-  get activeDriver() {
+  get activeDriver(): string | null {
     return this._adapter?.name || null;
   }
 
-  get ready() {
+  get ready(): Promise<RawStorageAdapter> {
     return this._getAdapter();
   }
 
-  async set(key, value, options = {}) {
+  async set<T = unknown>(
+    key: string,
+    value: T,
+    options: SetOptions<T> = {}
+  ): Promise<void> {
     const fullKey = this._fullKey(key);
     const adapter = await this._getAdapter();
     const record = this._encodeRecord(value, options);
@@ -82,53 +167,56 @@ export class Storage {
     await adapter.setRaw(fullKey, record);
   }
 
-  async get(key, options = {}) {
+  async get<T = unknown>(
+    key: string,
+    options: GetOptions<T> = {}
+  ): Promise<T | undefined> {
     const result = await this._read(key, { deserialize: true });
 
     if (result === MISSING) {
       return hasOwn(options, 'defaultValue') ? options.defaultValue : undefined;
     }
 
-    return result;
+    return result as T;
   }
 
-  async has(key) {
+  async has(key: string): Promise<boolean> {
     return (await this._read(key, { deserialize: false })) !== MISSING;
   }
 
-  async delete(key) {
+  async delete(key: string): Promise<void> {
     const adapter = await this._getAdapter();
     await adapter.deleteRaw(this._fullKey(key));
   }
 
-  async remove(key) {
+  async remove(key: string): Promise<void> {
     await this.delete(key);
   }
 
-  async clear() {
+  async clear(): Promise<void> {
     const adapter = await this._getAdapter();
     await adapter.clearRaw(this.prefix);
   }
 
-  async keys() {
+  async keys(): Promise<string[]> {
     return await this._liveKeys();
   }
 
-  async rawKeys() {
+  async rawKeys(): Promise<string[]> {
     const adapter = await this._getAdapter();
     const rawKeys = await adapter.keysRaw(this.prefix);
 
     return rawKeys.map((key) => key.slice(this.prefix.length));
   }
 
-  async values() {
+  async values(): Promise<unknown[]> {
     const entries = await this.entries();
     return entries.map((entry) => entry[1]);
   }
 
-  async entries() {
+  async entries(): Promise<Array<[string, unknown]>> {
     const keys = await this.keys();
-    const entries = [];
+    const entries: Array<[string, unknown]> = [];
 
     for (const key of keys) {
       const value = await this._read(key, { deserialize: true });
@@ -141,11 +229,11 @@ export class Storage {
     return entries;
   }
 
-  async size() {
+  async size(): Promise<number> {
     return (await this.keys()).length;
   }
 
-  async prune(options = {}) {
+  async prune(options: PruneOptions = {}): Promise<number> {
     const adapter = await this._getAdapter();
     const rawKeys = await adapter.keysRaw(this.prefix);
     let deleted = 0;
@@ -170,7 +258,7 @@ export class Storage {
     return deleted;
   }
 
-  async close() {
+  async close(): Promise<void> {
     if (this._adapter?.close) {
       await this._adapter.close();
     }
@@ -179,7 +267,10 @@ export class Storage {
     this._adapterPromise = null;
   }
 
-  async _read(key, options) {
+  async _read(
+    key: string,
+    options: { deserialize: boolean }
+  ): Promise<unknown> {
     const fullKey = this._fullKey(key);
     const adapter = await this._getAdapter();
     const raw = await adapter.getRaw(fullKey);
@@ -202,10 +293,10 @@ export class Storage {
     return this._deserializeRecord(record, fullKey);
   }
 
-  _encodeRecord(value, options) {
+  _encodeRecord<T = unknown>(value: T, options: SetOptions<T>): string {
     const codec = normalizeCodec(options.codec || this.codec);
     const expiresAt = this._resolveExpiresAt(options);
-    let payload;
+    let payload: string;
 
     this.codecs.set(codec.name, codec);
 
@@ -235,8 +326,8 @@ export class Storage {
     });
   }
 
-  _decodeRecord(raw, fullKey) {
-    let record;
+  _decodeRecord(raw: string, fullKey: string): StorageRecord {
+    let record: unknown;
 
     try {
       record = JSON.parse(raw);
@@ -251,7 +342,9 @@ export class Storage {
       !isObject(record) ||
       record.v !== RECORD_VERSION ||
       typeof record.value !== 'string' ||
-      !hasOwn(record, 'expiresAt')
+      !hasOwn(record, 'expiresAt') ||
+      (record.expiresAt !== null && typeof record.expiresAt !== 'number') ||
+      typeof record.codec !== 'string'
     ) {
       throw new StorageDataError('Stored record has an unsupported format.', {
         key: fullKey,
@@ -259,10 +352,15 @@ export class Storage {
       });
     }
 
-    return record;
+    return {
+      codec: record.codec,
+      expiresAt: record.expiresAt,
+      v: RECORD_VERSION,
+      value: record.value,
+    };
   }
 
-  _deserializeRecord(record, fullKey) {
+  _deserializeRecord(record: StorageRecord, fullKey: string): unknown {
     const codec = this.codecs.get(record.codec);
 
     if (!codec) {
@@ -286,7 +384,11 @@ export class Storage {
     }
   }
 
-  _inspectRaw(raw, fullKey, options) {
+  _inspectRaw(
+    raw: string,
+    fullKey: string,
+    options: { removeInvalid: boolean }
+  ): InspectAction {
     try {
       const record = this._decodeRecord(raw, fullKey);
       return this._isExpired(record) ? 'delete' : 'keep';
@@ -299,11 +401,11 @@ export class Storage {
     }
   }
 
-  _isExpired(record) {
+  _isExpired(record: StorageRecord): boolean {
     return record.expiresAt !== null && record.expiresAt <= this.clock();
   }
 
-  _resolveExpiresAt(options) {
+  _resolveExpiresAt(options: SetOptions): number | null {
     if (hasOwn(options, 'expiresAt')) {
       if (options.expiresAt === null || options.expiresAt === false) {
         return null;
@@ -319,11 +421,11 @@ export class Storage {
     return ttl === null ? null : this.clock() + ttl;
   }
 
-  _fullKey(key) {
+  _fullKey(key: string): string {
     return `${this.prefix}${assertKey(key)}`;
   }
 
-  async _getAdapter() {
+  async _getAdapter(): Promise<RawStorageAdapter> {
     if (this._adapter) {
       return this._adapter;
     }
@@ -336,9 +438,9 @@ export class Storage {
     return this._adapter;
   }
 
-  async _selectAdapter() {
+  async _selectAdapter(): Promise<RawStorageAdapter> {
     const drivers = uniqueByIdentity([this.driver, ...this.fallback]);
-    const errors = [];
+    const errors: Array<{ driver: string; error: unknown }> = [];
 
     for (const driver of drivers) {
       try {
@@ -357,8 +459,7 @@ export class Storage {
           error: 'Driver reported unavailable.',
         });
       } catch (error) {
-        const name =
-          typeof driver === 'string' ? driver : driver?.name || 'custom';
+        const name = driverName(driver);
         errors.push({ driver: name, error });
         this.onDriverError?.(error, name);
       }
@@ -372,7 +473,7 @@ export class Storage {
     );
   }
 
-  _createAdapter(driver) {
+  _createAdapter(driver: StorageDriver): RawStorageAdapter {
     if (isAdapter(driver)) {
       return driver;
     }
@@ -402,7 +503,7 @@ export class Storage {
       return this._createAdapter(customAdapter);
     }
 
-    const createAdapter = BUILTIN_ADAPTERS[driver];
+    const createAdapter = BUILTIN_ADAPTERS[driver as BuiltinStorageDriver];
 
     if (!createAdapter) {
       throw new StorageUnavailableError(
@@ -416,7 +517,7 @@ export class Storage {
     return createAdapter(this._driverOptions(driver));
   }
 
-  _driverOptions(driver) {
+  _driverOptions(driver: string): DriverOptions {
     const options = this.driverOptions || {};
     const nestedKeys = [
       'cookie',
@@ -432,16 +533,16 @@ export class Storage {
       return options;
     }
 
-    return {
-      ...options.shared,
-      ...options[driver],
-    };
+    const shared = isObject(options.shared) ? options.shared : {};
+    const specific = isObject(options[driver]) ? options[driver] : {};
+
+    return { ...shared, ...specific };
   }
 
-  async _liveKeys() {
+  async _liveKeys(): Promise<string[]> {
     const adapter = await this._getAdapter();
     const rawKeys = await adapter.keysRaw(this.prefix);
-    const keys = [];
+    const keys: string[] = [];
 
     for (const rawKey of rawKeys) {
       const raw = await adapter.getRaw(rawKey);
@@ -464,11 +565,13 @@ export class Storage {
   }
 }
 
-export function createStorage(options) {
+export function createStorage(options?: StorageOptions | string): Storage {
   return new Storage(options);
 }
 
-function normalizeFallback(fallback) {
+function normalizeFallback(
+  fallback: StorageOptions['fallback']
+): StorageDriver[] {
   if (fallback === undefined || fallback === null || fallback === false) {
     return [];
   }
@@ -488,7 +591,7 @@ function normalizeFallback(fallback) {
   return fallback;
 }
 
-function normalizeCodec(codec) {
+function normalizeCodec(codec: string | StorageCodec): StorageCodec {
   if (typeof codec === 'string') {
     const builtin = BUILTIN_CODECS[codec];
 
@@ -518,8 +621,11 @@ function normalizeCodec(codec) {
   };
 }
 
-function normalizeCodecs(codecs, activeCodec) {
-  const registry = new Map();
+function normalizeCodecs(
+  codecs: StorageOptions['codecs'],
+  activeCodec: StorageCodec
+): Map<string, StorageCodec> {
+  const registry = new Map<string, StorageCodec>();
 
   for (const codec of Object.values(BUILTIN_CODECS)) {
     registry.set(codec.name, codec);
@@ -541,13 +647,20 @@ function normalizeCodecs(codecs, activeCodec) {
   return registry;
 }
 
-function isAdapter(value) {
+function isAdapter(value: unknown): value is RawStorageAdapter {
+  if (!isObject(value)) {
+    return false;
+  }
+
   return (
-    value &&
     typeof value.getRaw === 'function' &&
     typeof value.setRaw === 'function' &&
     typeof value.deleteRaw === 'function' &&
     typeof value.clearRaw === 'function' &&
     typeof value.keysRaw === 'function'
   );
+}
+
+function driverName(driver: StorageDriver): string {
+  return typeof driver === 'string' ? driver : driver.name || 'custom';
 }

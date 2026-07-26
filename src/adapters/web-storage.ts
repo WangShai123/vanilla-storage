@@ -1,18 +1,32 @@
 import { StorageUnavailableError, toStorageError } from '../errors.js';
+import type { RawStorageAdapter } from '../utils.js';
+
+export interface WebStorageAdapterOptions {
+  storage?: globalThis.Storage;
+  window?: Window & Record<string, globalThis.Storage | undefined>;
+}
 
 function createTestKey() {
   return `__vanilla_storage_test__${Date.now()}_${Math.random()}`;
 }
 
-export class WebStorageAdapter {
-  constructor(type = 'localStorage', options = {}) {
+export class WebStorageAdapter implements RawStorageAdapter {
+  name: string;
+  type: 'localStorage' | 'sessionStorage';
+  storage: globalThis.Storage | null;
+  window?: Window & Record<string, globalThis.Storage | undefined>;
+
+  constructor(
+    type: 'localStorage' | 'sessionStorage' = 'localStorage',
+    options: WebStorageAdapterOptions = {}
+  ) {
     this.name = type;
     this.type = type;
     this.storage = options.storage || null;
     this.window = options.window;
   }
 
-  _getStorage() {
+  _getStorage(): globalThis.Storage {
     if (this.storage) {
       return this.storage;
     }
@@ -31,7 +45,7 @@ export class WebStorageAdapter {
     return storage;
   }
 
-  async isAvailable() {
+  async isAvailable(): Promise<boolean> {
     const testKey = createTestKey();
 
     try {
@@ -44,7 +58,7 @@ export class WebStorageAdapter {
     }
   }
 
-  async getRaw(key) {
+  async getRaw(key: string): Promise<string | undefined> {
     try {
       const value = this._getStorage().getItem(key);
       return value === null ? undefined : value;
@@ -53,7 +67,7 @@ export class WebStorageAdapter {
     }
   }
 
-  async setRaw(key, value) {
+  async setRaw(key: string, value: string): Promise<void> {
     try {
       this._getStorage().setItem(key, value);
     } catch (cause) {
@@ -61,7 +75,7 @@ export class WebStorageAdapter {
     }
   }
 
-  async deleteRaw(key) {
+  async deleteRaw(key: string): Promise<void> {
     try {
       this._getStorage().removeItem(key);
     } catch (cause) {
@@ -69,7 +83,7 @@ export class WebStorageAdapter {
     }
   }
 
-  async clearRaw(prefix = '') {
+  async clearRaw(prefix = ''): Promise<void> {
     const storage = this._getStorage();
     const keys = await this.keysRaw(prefix);
 
@@ -82,9 +96,9 @@ export class WebStorageAdapter {
     }
   }
 
-  async keysRaw(prefix = '') {
+  async keysRaw(prefix = ''): Promise<string[]> {
     const storage = this._getStorage();
-    const keys = [];
+    const keys: string[] = [];
 
     try {
       for (let index = 0; index < storage.length; index += 1) {
@@ -103,13 +117,13 @@ export class WebStorageAdapter {
 }
 
 export class LocalStorageAdapter extends WebStorageAdapter {
-  constructor(options = {}) {
+  constructor(options: WebStorageAdapterOptions = {}) {
     super('localStorage', options);
   }
 }
 
 export class SessionStorageAdapter extends WebStorageAdapter {
-  constructor(options = {}) {
+  constructor(options: WebStorageAdapterOptions = {}) {
     super('sessionStorage', options);
   }
 }
