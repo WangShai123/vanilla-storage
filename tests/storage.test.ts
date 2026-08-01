@@ -70,7 +70,9 @@ describe('createStorage', () => {
       async isAvailable() {
         return false;
       },
-      async getRaw() {},
+      async getRaw() {
+        return undefined;
+      },
       async setRaw() {},
       async deleteRaw() {},
       async clearRaw() {},
