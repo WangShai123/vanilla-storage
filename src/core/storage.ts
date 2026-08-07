@@ -337,7 +337,11 @@ export class Storage {
       });
     }
 
-    if (payload === undefined || typeof payload === 'function') {
+    if (
+      payload === undefined ||
+      typeof payload === 'function' ||
+      typeof payload === 'symbol'
+    ) {
       throw new StorageSerializationError(
         'Storage codec serialize() must return a JSON-compatible value.'
       );
@@ -346,9 +350,9 @@ export class Storage {
     try {
       return JSON.stringify({
         v: RECORD_VERSION,
-        codec: codec.name || 'custom',
-        expiresAt,
-        value: payload,
+        c: codec.name || 'custom',
+        e: expiresAt,
+        val: payload,
       });
     } catch (cause) {
       throw new StorageSerializationError(
@@ -373,10 +377,10 @@ export class Storage {
     if (
       !isObject(record) ||
       record.v !== RECORD_VERSION ||
-      !hasOwn(record, 'value') ||
-      !hasOwn(record, 'expiresAt') ||
-      (record.expiresAt !== null && typeof record.expiresAt !== 'number') ||
-      typeof record.codec !== 'string'
+      !hasOwn(record, 'val') ||
+      !hasOwn(record, 'e') ||
+      (record.e !== null && typeof record.e !== 'number') ||
+      typeof record.c !== 'string'
     ) {
       throw new StorageDataError('Stored record has an unsupported format.', {
         key: fullKey,
@@ -385,10 +389,10 @@ export class Storage {
     }
 
     return {
-      codec: record.codec,
-      expiresAt: record.expiresAt,
+      codec: record.c,
+      expiresAt: record.e,
       v: RECORD_VERSION,
-      value: record.value,
+      value: record.val,
     };
   }
 

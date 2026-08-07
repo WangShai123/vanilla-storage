@@ -56,79 +56,29 @@ await storage.set(key, value, options);
 await storage.get(key, options);
 await storage.has(key);
 await storage.delete(key);
+await storage.remove(key);
 await storage.clear();
 await storage.keys();
+await storage.rawKeys();
 await storage.values();
 await storage.entries();
 await storage.size();
-await storage.prune();
+await storage.prune(options);
 await storage.close();
 ```
 
-## Options
+## Drivers
 
-```js
-createStorage({
-  driver: 'localStorage',
-  namespace: 'vanilla-storage',
-  keySeparator: '::',
-  fallback: [],
-  ttl: null,
-  codec: 'json',
-  driverOptions: {},
-});
-```
-
-- `driver`: `'localStorage'`, `'sessionStorage'`, `'indexedDB'`, `'cookie'`, `'memory'`, an adapter, or an adapter factory.
-- `namespace`: key prefix used to isolate data. Set `null` to disable namespacing.
-- `fallback`: explicit fallback driver list. The library does not silently downgrade unless configured.
-- `ttl`: default time to live in milliseconds.
-- `codec`: `'json'`, `'raw-string'`, or a custom codec.
-- `driverOptions`: options passed to adapters.
-
-## Driver Options
-
-```js
-createStorage({
-  driver: 'cookie',
-  driverOptions: {
-    path: '/',
-    sameSite: 'lax',
-    secure: true,
-  },
-});
-
-createStorage({
-  driver: 'indexedDB',
-  driverOptions: {
-    dbName: 'MyAppStorage',
-    storeName: 'records',
-    version: 1,
-  },
-});
-```
-
-You can also scope options per driver:
-
-```js
-createStorage({
-  driver: 'indexedDB',
-  fallback: ['localStorage'],
-  driverOptions: {
-    indexedDB: { dbName: 'MyAppStorage' },
-    cookie: { path: '/', sameSite: 'lax' },
-  },
-});
-```
-
-## Design
-
-- All public methods are async, including synchronous browser storage drivers.
-- Stored records use a consistent envelope across drivers.
-- `clear()` only removes keys inside the configured namespace.
-- Expired records are lazily removed on read and can be eagerly removed with `prune()`.
-- Fallbacks are explicit so capacity and persistence semantics do not change silently.
+- `localStorage`
+- `sessionStorage`
+- `indexedDB`
+- `cookie`
+- `memory`
 
 ## Translations
 
 - [中文](README_zh.md)
+
+## Documentation
+
+- [Documentation](docs/en.md)

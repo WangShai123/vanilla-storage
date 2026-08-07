@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import {
+  StorageSerializationError,
   StorageUnavailableError,
   createStorage,
   rawStringCodec,
@@ -25,7 +26,7 @@ describe('createStorage', () => {
     expect(await storage.get('missing', { defaultValue: null })).toBeNull();
   });
 
-  it('stores JSON codec payload without nested JSON escaping', async () => {
+  it('stores JSON values in the compact record format', async () => {
     const map = new Map<string, string>();
     const storage = createStorage({
       driver: 'memory',
@@ -39,13 +40,15 @@ describe('createStorage', () => {
 
     expect(raw).toBeDefined();
     expect(raw).not.toContain('\\"');
-    expect(JSON.parse(raw as string).value).toEqual({
-      type: 'json',
-      value: 'zh_CN',
+    expect(JSON.parse(raw as string)).toEqual({
+      v: 1,
+      c: 'json',
+      e: null,
+      val: 'zh_CN',
     });
   });
 
-  it('stores cookie JSON payload with a single JSON encoding layer', async () => {
+  it('stores cookie JSON payload in the compact record format', async () => {
     const document = createCookieDocument();
     const storage = createStorage({
       driver: 'cookie',
@@ -60,14 +63,16 @@ describe('createStorage', () => {
     const decoded = decodeURIComponent(rawValue);
 
     expect(decoded).not.toContain('\\"');
-    expect(JSON.parse(decoded).value).toEqual({
-      type: 'json',
-      value: 'zh_CN',
+    expect(JSON.parse(decoded)).toEqual({
+      v: 1,
+      c: 'json',
+      e: null,
+      val: 'zh_CN',
     });
     expect(await storage.get('locale')).toBe('zh_CN');
   });
 
-  it('writes ttl to cookie expires when cookie expires is not configured', async () => {
+  it('uses ttl milliseconds to derive cookie expires when cookie expires is not configured', async () => {
     const now = Date.UTC(2030, 0, 1);
     const ttl = 60_000;
     const document = createCookieDocument();
@@ -81,9 +86,10 @@ describe('createStorage', () => {
 
     await storage.set('token', 'abc');
 
-    expect(document.writes[document.writes.length - 1]).toContain(
-      `Expires=${new Date(now + ttl).toUTCString()}`
-    );
+    const cookie = document.writes[document.writes.length - 1];
+
+    expect(cookie).toContain(`Expires=${new Date(now + ttl).toUTCString()}`);
+    expect(cookie).not.toContain('Max-Age=60000');
   });
 
   it('treats undefined cookie expires as not configured', async () => {
@@ -126,27 +132,6 @@ describe('createStorage', () => {
     expect(document.writes[document.writes.length - 1]).not.toContain(
       `Expires=${new Date(now + ttl).toUTCString()}`
     );
-  });
-
-  it('reads legacy JSON codec string payloads', async () => {
-    const map = new Map<string, string>();
-    const storage = createStorage({
-      driver: 'memory',
-      driverOptions: { map },
-      namespace: 'unit',
-    });
-
-    map.set(
-      'unit::locale',
-      JSON.stringify({
-        v: 1,
-        codec: 'json',
-        expiresAt: null,
-        value: '{"type":"json","value":"zh_CN"}',
-      })
-    );
-
-    expect(await storage.get('locale')).toBe('zh_CN');
   });
 
   it('removes expired records lazily', async () => {
@@ -237,6 +222,17 @@ describe('createStorage', () => {
     await storage.set('message', 'hello');
 
     expect(await storage.get('message')).toBe('hello');
+  });
+
+  it('rejects undefined JSON values', async () => {
+    const storage = createStorage({
+      driver: 'memory',
+      namespace: 'unit',
+    });
+
+    await expect(storage.set('empty', undefined)).rejects.toBeInstanceOf(
+      StorageSerializationError
+    );
   });
 });
 
