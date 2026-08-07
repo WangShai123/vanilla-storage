@@ -3,11 +3,14 @@ interface RawStorageAdapter {
   name: string;
   isAvailable?: () => boolean | Promise<boolean>;
   getRaw: (key: string) => Promise<string | undefined>;
-  setRaw: (key: string, value: string) => Promise<void>;
+  setRaw: (key: string, value: string, options?: RawStorageSetOptions) => Promise<void>;
   deleteRaw: (key: string) => Promise<void>;
   clearRaw: (prefix?: string) => Promise<void>;
   keysRaw: (prefix?: string) => Promise<string[]>;
   close?: () => void | Promise<void>;
+}
+interface RawStorageSetOptions {
+  expiresAt?: number | null;
 }
 //#endregion
 //#region src/adapters/cookie.d.ts
@@ -29,11 +32,12 @@ declare class CookieAdapter implements RawStorageAdapter {
   _getDocument(): Document;
   isAvailable(): Promise<boolean>;
   getRaw(key: string): Promise<string | undefined>;
-  setRaw(key: string, value: string): Promise<void>;
+  setRaw(key: string, value: string, options?: RawStorageSetOptions): Promise<void>;
   deleteRaw(key: string): Promise<void>;
   clearRaw(prefix?: string): Promise<void>;
   keysRaw(prefix?: string): Promise<string[]>;
   _setCookie(key: string, value: string, options: CookieDefaults): void;
+  _resolveSetOptions(options: RawStorageSetOptions): CookieDefaults;
   _validateCookieKey(key: string): void;
 }
 //#endregion
@@ -113,23 +117,23 @@ declare class SessionStorageAdapter extends WebStorageAdapter {
 //#region src/codecs/json.d.ts
 declare const jsonCodec: {
   name: string;
-  serialize(value: unknown): string;
-  deserialize(payload: string): unknown;
+  serialize(value: unknown): unknown;
+  deserialize(payload: unknown): unknown;
 };
 //#endregion
 //#region src/codecs/raw-string.d.ts
 declare const rawStringCodec: {
   name: string;
-  serialize(value: unknown): string;
-  deserialize(payload: string): string;
+  serialize(value: unknown): unknown;
+  deserialize(payload: unknown): string;
 };
 //#endregion
 //#region src/core/storage.d.ts
 declare const RECORD_VERSION = 1;
 interface StorageCodec<T = unknown> {
   name: string;
-  serialize(value: T): string;
-  deserialize(payload: string): T;
+  serialize(value: T): unknown;
+  deserialize(payload: unknown): T;
 }
 type BuiltinStorageDriver = 'cookie' | 'indexedDB' | 'localStorage' | 'memory' | 'sessionStorage';
 type StorageDriver = string | RawStorageAdapter | StorageAdapterFactory;
@@ -167,7 +171,11 @@ interface StorageRecord {
   codec: string;
   expiresAt: number | null;
   v: typeof RECORD_VERSION;
-  value: string;
+  value: unknown;
+}
+interface StorageExpiration {
+  expiresAt: number | null;
+  source: 'expiresAt' | 'none' | 'ttl';
 }
 type InspectAction = 'delete' | 'keep';
 declare class Storage {
@@ -205,6 +213,7 @@ declare class Storage {
     deserialize: boolean;
   }): Promise<unknown>;
   _encodeRecord<T = unknown>(value: T, options: SetOptions<T>): string;
+  _encodeRecordWithExpiration<T = unknown>(value: T, options: SetOptions<T>, expiresAt: number | null): string;
   _decodeRecord(raw: string, fullKey: string): StorageRecord;
   _deserializeRecord(record: StorageRecord, fullKey: string): unknown;
   _inspectRaw(raw: string, fullKey: string, options: {
@@ -212,6 +221,7 @@ declare class Storage {
   }): InspectAction;
   _isExpired(record: StorageRecord): boolean;
   _resolveExpiresAt(options: SetOptions): number | null;
+  _resolveExpiration(options: SetOptions): StorageExpiration;
   _fullKey(key: string): string;
   _getAdapter(): Promise<RawStorageAdapter>;
   _selectAdapter(): Promise<RawStorageAdapter>;

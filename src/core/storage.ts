@@ -28,8 +28,8 @@ const RECORD_VERSION = 1;
 
 export interface StorageCodec<T = unknown> {
   name: string;
-  serialize(value: T): string;
-  deserialize(payload: string): T;
+  serialize(value: T): unknown;
+  deserialize(payload: unknown): T;
 }
 
 export type BuiltinStorageDriver =
@@ -84,7 +84,12 @@ interface StorageRecord {
   codec: string;
   expiresAt: number | null;
   v: typeof RECORD_VERSION;
-  value: string;
+  value: unknown;
+}
+
+interface StorageExpiration {
+  expiresAt: number | null;
+  source: 'expiresAt' | 'none' | 'ttl';
 }
 
 type InspectAction = 'delete' | 'keep';
@@ -162,9 +167,18 @@ export class Storage {
   ): Promise<void> {
     const fullKey = this._fullKey(key);
     const adapter = await this._getAdapter();
-    const record = this._encodeRecord(value, options);
+    const expiration = this._resolveExpiration(options);
+    const record = this._encodeRecordWithExpiration(
+      value,
+      options,
+      expiration.expiresAt
+    );
 
-    await adapter.setRaw(fullKey, record);
+    await adapter.setRaw(
+      fullKey,
+      record,
+      expiration.source === 'ttl' ? { expiresAt: expiration.expiresAt } : {}
+    );
   }
 
   async get<T = unknown>(
@@ -294,9 +308,20 @@ export class Storage {
   }
 
   _encodeRecord<T = unknown>(value: T, options: SetOptions<T>): string {
+    return this._encodeRecordWithExpiration(
+      value,
+      options,
+      this._resolveExpiresAt(options)
+    );
+  }
+
+  _encodeRecordWithExpiration<T = unknown>(
+    value: T,
+    options: SetOptions<T>,
+    expiresAt: number | null
+  ): string {
     const codec = normalizeCodec(options.codec || this.codec);
-    const expiresAt = this._resolveExpiresAt(options);
-    let payload: string;
+    let payload: unknown;
 
     this.codecs.set(codec.name, codec);
 
@@ -312,18 +337,25 @@ export class Storage {
       });
     }
 
-    if (typeof payload !== 'string') {
+    if (payload === undefined || typeof payload === 'function') {
       throw new StorageSerializationError(
-        'Storage codec serialize() must return a string.'
+        'Storage codec serialize() must return a JSON-compatible value.'
       );
     }
 
-    return JSON.stringify({
-      v: RECORD_VERSION,
-      codec: codec.name || 'custom',
-      expiresAt,
-      value: payload,
-    });
+    try {
+      return JSON.stringify({
+        v: RECORD_VERSION,
+        codec: codec.name || 'custom',
+        expiresAt,
+        value: payload,
+      });
+    } catch (cause) {
+      throw new StorageSerializationError(
+        'Failed to encode storage record as JSON.',
+        { cause }
+      );
+    }
   }
 
   _decodeRecord(raw: string, fullKey: string): StorageRecord {
@@ -341,7 +373,7 @@ export class Storage {
     if (
       !isObject(record) ||
       record.v !== RECORD_VERSION ||
-      typeof record.value !== 'string' ||
+      !hasOwn(record, 'value') ||
       !hasOwn(record, 'expiresAt') ||
       (record.expiresAt !== null && typeof record.expiresAt !== 'number') ||
       typeof record.codec !== 'string'
@@ -406,19 +438,30 @@ export class Storage {
   }
 
   _resolveExpiresAt(options: SetOptions): number | null {
+    return this._resolveExpiration(options).expiresAt;
+  }
+
+  _resolveExpiration(options: SetOptions): StorageExpiration {
     if (hasOwn(options, 'expiresAt')) {
       if (options.expiresAt === null || options.expiresAt === false) {
-        return null;
+        return { expiresAt: null, source: 'expiresAt' };
       }
 
-      return normalizeTimestamp(options.expiresAt, 'expiresAt');
+      return {
+        expiresAt: normalizeTimestamp(options.expiresAt, 'expiresAt'),
+        source: 'expiresAt',
+      };
     }
 
+    const hasTtl = hasOwn(options, 'ttl') || this.defaultTtl !== null;
     const ttl = hasOwn(options, 'ttl')
       ? normalizeTtl(options.ttl)
       : this.defaultTtl;
 
-    return ttl === null ? null : this.clock() + ttl;
+    return {
+      expiresAt: ttl === null ? null : this.clock() + ttl,
+      source: hasTtl ? 'ttl' : 'none',
+    };
   }
 
   _fullKey(key: string): string {

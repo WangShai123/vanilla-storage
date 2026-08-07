@@ -3,7 +3,7 @@ import { StorageSerializationError } from '../errors.js';
 export const jsonCodec = {
   name: 'json',
 
-  serialize(value: unknown): string {
+  serialize(value: unknown): unknown {
     if (typeof value === 'function' || typeof value === 'symbol') {
       throw new StorageSerializationError(
         'JSON codec cannot serialize functions or symbols.'
@@ -11,11 +11,12 @@ export const jsonCodec = {
     }
 
     if (value === undefined) {
-      return '{"type":"undefined"}';
+      return { type: 'undefined' };
     }
 
     try {
-      return JSON.stringify({ type: 'json', value });
+      JSON.stringify({ type: 'json', value });
+      return { type: 'json', value };
     } catch (cause) {
       throw new StorageSerializationError(
         'Failed to serialize value with JSON codec.',
@@ -24,9 +25,10 @@ export const jsonCodec = {
     }
   },
 
-  deserialize(payload: string): unknown {
+  deserialize(payload: unknown): unknown {
     try {
-      const decoded = JSON.parse(payload);
+      const decoded =
+        typeof payload === 'string' ? JSON.parse(payload) : payload;
 
       if (isCodecPayload(decoded) && decoded.type === 'undefined') {
         return undefined;

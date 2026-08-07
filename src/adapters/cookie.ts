@@ -3,7 +3,7 @@ import {
   StorageUnavailableError,
   toStorageError,
 } from '../errors.js';
-import type { RawStorageAdapter } from '../utils.js';
+import type { RawStorageAdapter, RawStorageSetOptions } from '../utils.js';
 
 export interface CookieAdapterOptions {
   document?: Document;
@@ -96,9 +96,13 @@ export class CookieAdapter implements RawStorageAdapter {
     }
   }
 
-  async setRaw(key: string, value: string): Promise<void> {
+  async setRaw(
+    key: string,
+    value: string,
+    options: RawStorageSetOptions = {}
+  ): Promise<void> {
     try {
-      this._setCookie(key, value, this.defaults);
+      this._setCookie(key, value, this._resolveSetOptions(options));
     } catch (cause) {
       throw toStorageError(cause, { driver: this.name, key });
     }
@@ -185,6 +189,21 @@ export class CookieAdapter implements RawStorageAdapter {
     }
 
     this._getDocument().cookie = cookie;
+  }
+
+  _resolveSetOptions(options: RawStorageSetOptions): CookieDefaults {
+    if (
+      this.defaults.expires !== undefined ||
+      options.expiresAt === undefined ||
+      options.expiresAt === null
+    ) {
+      return this.defaults;
+    }
+
+    return {
+      ...this.defaults,
+      expires: new Date(options.expiresAt),
+    };
   }
 
   _validateCookieKey(key: string): void {

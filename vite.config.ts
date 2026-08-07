@@ -6,7 +6,7 @@ export default defineConfig({
     outDir: 'dist',
     format: ['esm', 'umd'],
     globalName: 'vanillaStorage',
-    target: 'es2020',
+    target: 'es2022',
     platform: 'browser',
     minify: true,
     clean: true,

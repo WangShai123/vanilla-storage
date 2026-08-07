@@ -4,11 +4,19 @@ export interface RawStorageAdapter {
   name: string;
   isAvailable?: () => boolean | Promise<boolean>;
   getRaw: (key: string) => Promise<string | undefined>;
-  setRaw: (key: string, value: string) => Promise<void>;
+  setRaw: (
+    key: string,
+    value: string,
+    options?: RawStorageSetOptions
+  ) => Promise<void>;
   deleteRaw: (key: string) => Promise<void>;
   clearRaw: (prefix?: string) => Promise<void>;
   keysRaw: (prefix?: string) => Promise<string[]>;
   close?: () => void | Promise<void>;
+}
+
+export interface RawStorageSetOptions {
+  expiresAt?: number | null;
 }
 
 export function hasOwn<K extends PropertyKey>(
